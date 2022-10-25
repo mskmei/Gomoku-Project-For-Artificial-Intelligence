@@ -1,4 +1,5 @@
 from copy import deepcopy
+import time
 
 points = [0, 2, 8, 1e1, 1e2, 1e3, 1e4, 1e5]
 
@@ -46,6 +47,7 @@ class Board:
         for x in range(self.width):
             for y in range(self.height):
                 if self.board[x][y] == 0 and self.adjacent(x,y):
+                    # x,y 可落子且附近有子
                     m_score,o_score=self.point_score(x,y,role)
                     action=(max(m_score,o_score),x,y)
                     if m_score>=points[FIVE] or o_score>=points[FIVE]:
@@ -101,6 +103,7 @@ class Board:
         return score
 
     def make_line(self, x, y, direction, role):
+        # 在某个方向上制造直线
         line = [0 for _ in range(9)]
         tempx = x - 5 * direction[0]
         tempy = y - 5 * direction[1]
@@ -110,6 +113,7 @@ class Board:
             if 0 <= tempx <= self.width and 0 <= tempy <= self.height:
                 line[i] = self.board[tempx][tempy]
             else:
+                # 如果越界直接设置为对方棋子，这在棋型判断上不影响
                 line[i] = 3 - role
         return line
 
@@ -133,12 +137,15 @@ class Board:
         left = 4
         right = 4
         line = self.make_line(x, y, direction, role)
+
+        # 判断直线上的同类棋子的数量
         while left > 0 and line[left - 1] == role:
             left -= 1
         while right < 8 and line[right + 1] == role:
             right += 1
         left_edge = left
         right_edge = right
+        # 判断空子的数量
         while left_edge > 0 and line[left_edge - 1] != 3 - role:
             left_edge -= 1
         while right_edge < 8 and line[right_edge + 1] != 3 - role:
@@ -248,9 +255,10 @@ class Board:
     def utility(self,role):
 
 
-def max_value(board, role, alpha, beta, depth):
-    if depth >= max_depth:
-        return board.utility(), None
+def max_value(board, role, alpha, beta, depth, t):
+
+    if depth>=max_depth or (time.time() - t > 10):
+        return board.utility(),None
     v = float("-inf")
 
     action_list = board.get_actions(role)  # 获取自己可下的地方
@@ -258,7 +266,7 @@ def max_value(board, role, alpha, beta, depth):
         action = None
         for a in action_list:
             new_board = deepcopy(board)
-            new_board.update(a[0], a[1], role)
+            new_board.update(a[0],a[1],role)
             move_v, _ = min_value(new_board, role, alpha, beta, depth + 1)
             if move_v > v:
                 v = move_v
@@ -266,7 +274,7 @@ def max_value(board, role, alpha, beta, depth):
             if v >= beta: return v, action
             alpha = max(alpha, v)
         return v, action
-        # ---------------------------------
+            # ---------------------------------
 
     else:  # 没有地方下
         v = board.utility()
@@ -274,17 +282,18 @@ def max_value(board, role, alpha, beta, depth):
     return v, action
 
 
-def min_value(board, role, alpha, beta, depth):
-    if depth >= max_depth:
-        return board.utility(), None
+def min_value(board, role, alpha, beta, depth, t):
+
+    if depth>=max_depth or (time.time() - t > 10):
+        return board.utility(),None
     v = float("inf")
 
-    action_list = board.get_actions(3 - role)  # 获取对手可下的地方
+    action_list = board.get_actions(3-role)  # 获取对手可下的地方
     if len(action_list) != 0:  # 有地方可下
         action = None
         for a in action_list:
             new_board = deepcopy(board)
-            new_board.update(a[0], a[1], 3 - role)
+            new_board.update(a[0],a[1],3-role)
             move_v, _ = min_value(new_board, role, alpha, beta, depth + 1)
             if move_v < v:
                 v = move_v
@@ -292,19 +301,18 @@ def min_value(board, role, alpha, beta, depth):
             if v <= alpha: return v, action
             beta = min(beta, v)
         return v, action
-        # ---------------------------------
+            # ---------------------------------
 
     else:  # 没有地方下
         v = board.utility()
         action = None
     return v, action
 
-
-def search(board):
-    P = Board(board)
-    alpha = float("-inf")
-    beta = float("inf")
-    depth = 0
-    role = 1
-    _, action = max_value(board, role, alpha, beta, depth)
+def search(board, t):
+    P=Board(board)
+    alpha=float("-inf")
+    beta=float("inf")
+    depth=0
+    role=1
+    _,action=max_value(board,role,alpha,beta,depth, t)
     return action
