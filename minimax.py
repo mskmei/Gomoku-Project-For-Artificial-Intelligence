@@ -31,10 +31,13 @@ class Board:
         for i in range(-1, 2):
             for j in range(-1, 2):
                 if i == 0 and j == 0:
-                    pass
-                if not self.board[x][y] == 0:
+                    continue
+                elif not self.board[max(min(x+i,self.width-1),0)][max(min(y+j,self.height-1),0)] == 0:
                     return True
         return False
+
+    def out_bound(self,x,y):
+        return x<0 or x>=self.width or y<0 or y>=self.height
 
     def get_actions(self, role):
 
@@ -51,6 +54,8 @@ class Board:
                     elif m_score >= points[FOUR] or o_score >= points[FOUR]:
                         live_four.append(action)
                     actions.append(action)
+        if len(actions)==0:
+            return [(0,int(self.width/2)-1,int(self.height/2)-1)]
         if len(five) > 0:
             return five
         if len(live_four) > 0:
@@ -58,7 +63,7 @@ class Board:
         actions.sort(reverse=True)
         if len(actions) > max_actions_num:
             actions = actions[0:max_actions_num]
-
+        print(actions)
         return actions
 
     def point_score(self, x, y, role):
@@ -74,6 +79,7 @@ class Board:
         for direction in directions:
             self.check_line(x, y, direction, 3 - role, self.count[2 - role])
         o_score = self.get_point_score(3 - role)
+        self.board[x][y]=0
         return m_score, o_score
 
     def get_point_score(self, role):
@@ -105,7 +111,7 @@ class Board:
         for i in range(9):
             tempx += direction[0]
             tempy += direction[1]
-            if 0 <= tempx <= self.width and 0 <= tempy <= self.height:
+            if 0 <= tempx < self.width and 0 <= tempy < self.height:
                 line[i] = self.board[tempx][tempy]
             else:
                 line[i] = 3 - role
@@ -116,16 +122,19 @@ class Board:
             index = 0
         elif direction == (0, 1):
             index = 1
-        elif direction == (1, -1):
+        elif direction == (1, 1):
             index = 2
         else:
             index = 3
         tempx = x + (left_m - 5) * direction[0]
-        tempy = y + (left_m - 5) * direction[0]
+        tempy = y + (left_m - 5) * direction[1]
         for i in range(left_m, right_m + 1):
             tempx += direction[0]
             tempy += direction[1]
-            self.involved[tempx][tempy][index] = 1
+            if self.out_bound(tempx,tempy):
+                continue
+            else:
+                self.involved[tempx][tempy][index] = 1
 
     def check_line(self, x, y, direction, role, count):
         left = 4
@@ -299,16 +308,16 @@ def max_value(board, role, alpha, beta, depth):
 
 def min_value(board, role, alpha, beta, depth):
     if depth >= max_depth:
-        return board.utility(), None
+        return board.utility(role), None
     v = float("inf")
 
-    action_list = board.get_actions(3 - role)  # 获取对手可下的地方
-    if len(action_list) != 0:  # 有地方可下
+    action_list = board.get_actions(3 - role)
+    if len(action_list) != 0:
         action = None
         for a in action_list:
-            board.board[a[0]][a[1]]=3-role
+            board.board[a[1]][a[2]]=3-role
             move_v, _ = max_value(board, role, alpha, beta, depth + 1)
-            board.board[a[0]][a[1]]=0
+            board.board[a[1]][a[2]]=0
             if move_v < v:
                 v = move_v
                 action = a
@@ -330,4 +339,4 @@ def search(board,width,height):
     depth = 0
     role = 1
     _, action = max_value(P, role, alpha, beta, depth)
-    return action
+    return action[1],action[2]
