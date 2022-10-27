@@ -58,13 +58,8 @@ def brain_takeback(x, y):
 
 
 def brain_turn():
-    try:
-        if pp.terminateAI:
-            return
-        (x,y)=ab.search(board)
-        pp.do_mymove(x, y)
-    except:
-        logTraceBack()
+    (x,y)=ab.search(board)
+    pp.do_mymove(x, y)
 
 
 def brain_end():
