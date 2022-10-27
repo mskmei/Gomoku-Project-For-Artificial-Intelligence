@@ -1,353 +1,153 @@
-points = [0, 2, 8, 1e1, 1e2, 1e3, 1e4, 1e5]
+import pisqpipe as pp
+import minimax as ab
+from pisqpipe import DEBUG_EVAL, DEBUG
 
-FIVE = 7
-FOUR = 6
-SFOUR = 5
-THREE = 4
-STHREE = 3
-TWO = 2
-STWO = 1
-ONE = 0
+pp.infotext = 'name="pbrain-pyrandom", author="Jan Stransky", version="1.0", country="Czech Republic", www="https://github.com/stranskyjan/pbrain-pyrandom"'
 
-w = 1
-
-tolerance = 10
-
-max_depth = 3
-
-max_actions_num = 10
+MAX_BOARD = 100
+board = [[0 for i in range(MAX_BOARD)] for j in range(MAX_BOARD)]
 
 
-class Board:
+def brain_init():
+    if pp.width < 5 or pp.height < 5:
+        pp.pipeOut("ERROR size of the board")
+        return
+    if pp.width > MAX_BOARD or pp.height > MAX_BOARD:
+        pp.pipeOut("ERROR Maximal board size is {}".format(MAX_BOARD))
+        return
+    pp.pipeOut("OK")
 
-    def __init__(self, board, width, height):
-        self.board = board[0:width][0:height]
-        self.width = width
-        self.height = height
-        self.count = [[0 for pattern in range(8)] for role in range(2)]
-        self.involved = [[[0, 0, 0, 0] for y in range(height)] for x in range(width)]
 
-    def adjacent(self, x, y):
-        for i in range(-1, 2):
-            for j in range(-1, 2):
-                if i == 0 and j == 0:
-                    continue
-                elif not self.board[max(min(x + i, self.width - 1), 0)][max(min(y + j, self.height - 1), 0)] == 0:
-                    return True
-        return False
+def brain_restart():
+    for x in range(pp.width):
+        for y in range(pp.height):
+            board[x][y] = 0
+    pp.pipeOut("OK")
 
-    def out_bound(self, x, y):
-        return x < 0 or x >= self.width or y < 0 or y >= self.height
 
-    def get_actions(self, role):
+def isFree(x, y):
+    return x >= 0 and y >= 0 and x < pp.width and y < pp.height and board[x][y] == 0
 
-        actions = []
-        five = []
-        live_four = []
-        for x in range(self.width):
-            for y in range(self.height):
-                if self.board[x][y] == 0 and self.adjacent(x, y):
-                    m_score, o_score = self.point_score(x, y, role)
-                    action = (max(m_score, o_score), x, y)
-                    if m_score >= points[FIVE] or o_score >= points[FIVE]:
-                        five.append(action)
-                    elif m_score >= points[FOUR] or o_score >= points[FOUR]:
-                        live_four.append(action)
-                    actions.append(action)
-        if len(actions) == 0:
-            return [(0, int(self.width / 2) - 1, int(self.height / 2) - 1)]
-        if len(five) > 0:
-            return five
-        if len(live_four) > 0:
-            return live_four
-        actions.sort(reverse=True)
-        if len(actions) > max_actions_num:
-            actions = actions[0:max_actions_num]
-        print(actions)
-        return actions
 
-    def point_score(self, x, y, role):
+def brain_my(x, y):
+    if isFree(x, y):
+        board[x][y] = 1
+    else:
+        pp.pipeOut("ERROR my move [{},{}]".format(x, y))
 
-        self.count = [[0 for chess_shape in range(8)] for role in range(2)]
-        directions = [(1, 0), (0, 1), (1, -1), (-1, 1)]
-        self.board[x][y] = role
-        for direction in directions:
-            self.check_line(x, y, direction, role, self.count[role - 1])
-        m_score = self.get_point_score(role)
-        self.board[x][y] = 3 - role
-        self.count = [[0 for chess_shape in range(8)] for role in range(2)]
-        for direction in directions:
-            self.check_line(x, y, direction, 3 - role, self.count[2 - role])
-        o_score = self.get_point_score(3 - role)
-        self.board[x][y] = 0
-        return m_score, o_score
 
-    def get_point_score(self, role):
-        score = 0
-        if self.count[role - 1][FIVE] > 0:
-            return points[FIVE]
+def brain_opponents(x, y):
+    if isFree(x, y):
+        board[x][y] = 2
+    else:
+        pp.pipeOut("ERROR opponents's move [{},{}]".format(x, y))
 
-        if self.count[role - 1][FOUR] >= 0:
-            return points[FOUR]
 
-        if self.count[role - 1][SFOUR] > 1:
-            score += self.count[role - 1][SFOUR] * points[SFOUR]
-        elif self.count[role - 1][SFOUR] > 0 and self.count[role - 1][THREE] > 0:
-            score += self.count[role - 1][SFOUR] * points[SFOUR]
-        elif self.count[role - 1][SFOUR] > 0:
-            score += points[THREE]
+def brain_block(x, y):
+    if isFree(x, y):
+        board[x][y] = 3
+    else:
+        pp.pipeOut("ERROR winning move [{},{}]".format(x, y))
 
-        if self.count[role-1][THREE]>1:
-            score += 5*points[THREE]
-        else:
-            score += points[THREE]
 
-        score += self.count[role - 1][STHREE] * points[STHREE]
-        score += self.count[role - 1][TWO] * points[TWO]
-        score += self.count[role - 1][STWO] * points[STWO]
-
-        return score
-
-    def make_line(self, x, y, direction, role):
-        line = [0 for _ in range(9)]
-        tempx = x - 5 * direction[0]
-        tempy = y - 5 * direction[1]
-        for i in range(9):
-            tempx += direction[0]
-            tempy += direction[1]
-            if 0 <= tempx < self.width and 0 <= tempy < self.height:
-                line[i] = self.board[tempx][tempy]
-            else:
-                line[i] = 3 - role
-        return line
-
-    def involve(self, x, y, left_m, right_m, direction):
-        if direction == (1, 0):
-            index = 0
-        elif direction == (0, 1):
-            index = 1
-        elif direction == (1, 1):
-            index = 2
-        else:
-            index = 3
-        tempx = x + (left_m - 5) * direction[0]
-        tempy = y + (left_m - 5) * direction[1]
-        for i in range(left_m, right_m + 1):
-            tempx += direction[0]
-            tempy += direction[1]
-            if self.out_bound(tempx, tempy):
-                continue
-            else:
-                self.involved[tempx][tempy][index] = 1
-
-    def check_line(self, x, y, direction, role, count):
-        left = 4
-        right = 4
-        line = self.make_line(x, y, direction, role)
-        while left > 0 and line[left - 1] == role:
-            left -= 1
-        while right < 8 and line[right + 1] == role:
-            right += 1
-        left_edge = left
-        right_edge = right
-        while left_edge > 0 and line[left_edge - 1] != 3 - role:
-            left_edge -= 1
-        while right_edge < 8 and line[right_edge + 1] != 3 - role:
-            right_edge += 1
-        pattern_length = right_edge - left_edge + 1
-        if pattern_length < 5:
-            self.involve(x, y, left_edge, right_edge, direction)
-            return
-        self.involve(x, y, left, right, direction)
-        m_length = right - left + 1
-        if m_length == 5:
-            count[FIVE] += 1
-        elif m_length == 4:
-            if line[left - 1] == 0 and line[right + 1] == 0:
-                count[FOUR] += 1
-            else:
-                count[SFOUR] += 1
-        elif m_length == 3:
-            if line[left - 1] == 0 and line[left - 2] == role:
-                self.involve(x, y, left - 2, left - 2, direction)
-                count[SFOUR] += 1
-            elif line[right + 1] == 0 and line[right + 2] == role:
-                self.involve(x, y, right + 2, right + 2, direction)
-                count[SFOUR] += 1
-            elif line[right + 1] == 0 and line[left - 1] == 0 and (line[right + 2] == 0 or line[left - 2] == 0):
-                count[THREE] += 1
-            else:
-                count[STHREE] += 1
-        elif m_length == 2:
-            if line[left - 1] == 0 and line[left - 2] == role:
-                self.involve(x, y, left - 2, left - 2, direction)
-                if line[left - 3] == 0 and line[right + 1] == 0:
-                    count[THREE] += 1
-                elif line[left - 3] == 0 and line[right + 1] == 3 - role:
-                    count[STHREE] += 1
-                elif line[left - 3] == 3 - role:
-                    count[STHREE] += 1
-                elif line[left - 3] == role:
-                    self.involve(x, y, left - 3, left - 3, direction)
-                    count[SFOUR] += 1
-            elif line[right + 1] == 0 and line[right + 2] == role:
-                self.involve(x, y, right + 2, right + 2, direction)
-                if line[right + 3] == 0 and line[left - 1] == 0:
-                    count[THREE] += 1
-                elif line[right + 3] == 0 and line[left - 1] == 3 - role:
-                    count[STHREE] += 1
-                elif line[right + 3] == 3 - role:
-                    count[STHREE] += 1
-            elif line[right + 1] == 0 and line[right + 2] == 0 and line[right + 3] == role:
-                self.involve(x, y, right + 3, right + 3, direction)
-                count[STHREE] += 1
-            elif line[left - 1] == 0 and line[left - 2] == 0 and line[left - 3] == role:
-                self.involve(x, y, left - 3, left - 3, direction)
-                count[STHREE] += 1
-            else:
-                if line[left] == 0 and line[right] == 0:
-                    count[TWO] += 1
-                else:
-                    count[STWO] += 1
-        elif m_length == 1:
-            if line[left - 1] == 0 and line[left - 2] == role and line[left - 3] == 0 and line[right + 1] == 3 - role:
-                self.involve(x, y, left - 2, left - 2, direction)
-                count[STWO] += 1
-            elif line[right + 1] == 0 and line[right + 2] == role and line[right + 3] == 0:
-                self.involve(x, y, right + 2, right + 2, direction)
-                if line[left - 1] == 3 - role:
-                    count[STWO] += 1
-                else:
-                    count[TWO] += 1
-            elif line[right + 1] == 0 and line[right + 2] == 0 and line[right + 3] == role and line[right + 4] == 0:
-                self.involve(x, y, right + 3, right + 3, direction)
-                count[TWO] += 1
+def brain_takeback(x, y):
+    if x >= 0 and y >= 0 and x < pp.width and y < pp.height and board[x][y] != 0:
+        board[x][y] = 0
         return 0
-
-    def get_score(self, role):
-        m_score = 0
-        o_score = 0
-        if self.count[role - 1][FIVE] > 0:
-            return points[FIVE], 0
-        if self.count[2 - role][FIVE] > 0:
-            return 0, points[FIVE]
-        if self.count[role - 1][SFOUR] >= 2:
-            self.count[role - 1][FOUR] += 1
-        if self.count[2 - role][SFOUR] >= 2:
-            self.count[2 - role][FOUR] += 1
-
-        if self.count[role - 1][FOUR] > 0:
-            return 9050, 0
-        if self.count[role - 1][SFOUR] > 0:
-            return 9040, 0
-
-        if self.count[2 - role][FOUR] > 0:
-            return 0, 9030
-        if self.count[2 - role][SFOUR] > 0:
-            return 0, 9020
-
-        if self.count[role - 1][THREE] > 0 and self.count[2 - role][SFOUR] == 0:
-            return 9010, 0
-        if self.count[2 - role][THREE] > 1 and self.count[role - 1][THREE] == 0 and self.count[role - 1][STHREE] == 0:
-            return 0, 9000
-
-        if self.count[2 - role][SFOUR] > 0:
-            o_score += 400
-
-        if self.count[role-1][THREE] > 1:
-            m_score += 500
-        else:
-            m_score += points[THREE]
-
-        if self.count[2-role][THREE] > 1:
-            o_score += 2000
-        else:
-            o_score += 4*points[THREE]
-        m_score += self.count[role - 1][TWO] * points[TWO]
-        m_score += self.count[role - 1][STWO] * points[STWO]
-        o_score += self.count[2 - role][THREE] * points[THREE]
-        o_score += self.count[2 - role][STHREE] * points[STHREE]
-        o_score += self.count[2 - role][TWO] * points[TWO]
-        o_score += self.count[2 - role][STWO] * points[STWO]
-
-        return m_score, o_score
-
-    def utility(self, role):
-        self.count = [[0 for pattern in range(8)] for role in range(2)]
-        self.involved = [[[0, 0, 0, 0] for y in range(self.height)] for x in range(self.width)]
-        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
-        for y in range(self.height):
-            for x in range(self.width):
-                if self.board[x][y] == role:
-                    for i in range(4):
-                        if self.involved[x][y][i] == 0:
-                            self.check_line(x, y, directions[i], role, self.count[role - 1])
-                if self.board[x][y] == 3 - role:
-                    for i in range(4):
-                        if self.involved[x][y][i] == 0:
-                            self.check_line(x, y, directions[i], 3 - role, self.count[2 - role])
-
-        m_score, o_score = self.get_score(role)
-        return w * m_score - o_score
+    return 2
 
 
-def max_value(board, role, alpha, beta, depth):
-    if depth >= max_depth:
-        return board.utility(role), None
-    v = float("-inf")
-
-    action_list = board.get_actions(role)  # 获取自己可下的地方
-    if len(action_list) != 0:  # 有地方可下
-        action = None
-        for a in action_list:
-            board.board[a[1]][a[2]] = role
-            move_v, _ = min_value(board, role, alpha, beta, depth + 1)
-            board.board[a[1]][a[2]] = 0
-            if move_v > v:
-                v = move_v
-                action = a
-            if v >= beta: return v, action
-            alpha = max(alpha, v)
-        return v, action
-        # ---------------------------------
-
-    else:  # 没有地方下
-        v = board.utility()
-        action = None
-    return v, action
+def brain_turn():
+    try:
+        if pp.terminateAI:
+            return
+        x, y = ab.search(board, pp.width, pp.height)
+        pp.do_mymove(x, y)
+    except:
+        logTraceBack()
 
 
-def min_value(board, role, alpha, beta, depth):
-    if depth >= max_depth:
-        return board.utility(role), None
-    v = float("inf")
-
-    action_list = board.get_actions(3 - role)
-    if len(action_list) != 0:
-        action = None
-        for a in action_list:
-            board.board[a[1]][a[2]] = 3 - role
-            move_v, _ = max_value(board, role, alpha, beta, depth + 1)
-            board.board[a[1]][a[2]] = 0
-            if move_v < v:
-                v = move_v
-                action = a
-            if v <= alpha: return v, action
-            beta = min(beta, v)
-        return v, action
-        # ---------------------------------
-
-    else:  # 没有地方下
-        v = board.utility()
-        action = None
-    return v, action
+def brain_end():
+    pass
 
 
-def search(board, width, height):
-    P = Board(board, width, height)
-    alpha = float("-inf")
-    beta = float("inf")
-    depth = 0
-    role = 1
-    _, action = max_value(P, role, alpha, beta, depth)
-    return action[1], action[2]
+def brain_about():
+    pp.pipeOut(pp.infotext)
+
+
+if DEBUG_EVAL:
+    import win32gui
+
+
+    def brain_eval(x, y):
+        # TODO check if it works as expected
+        wnd = win32gui.GetForegroundWindow()
+        dc = win32gui.GetDC(wnd)
+        rc = win32gui.GetClientRect(wnd)
+        c = str(board[x][y])
+        win32gui.ExtTextOut(dc, rc[2] - 15, 3, 0, None, c, ())
+        win32gui.ReleaseDC(wnd, dc)
+
+######################################################################
+# A possible way how to debug brains.
+# To test it, just "uncomment" it (delete enclosing """)
+######################################################################
+# define a file for logging ...
+DEBUG_LOGFILE = "D:/pbrain-pyrandom-master/pbrain-pyrandom.log"
+# ...and clear it initially
+with open(DEBUG_LOGFILE, "w") as f:
+    pass
+
+
+# define a function for writing messages to the file
+def logDebug(msg):
+    with open(DEBUG_LOGFILE, "a") as f:
+        f.write(msg + "\n")
+        f.flush()
+
+
+# define a function to get exception traceback
+def logTraceBack():
+    import traceback
+    with open(DEBUG_LOGFILE, "a") as f:
+        traceback.print_exc(file=f)
+        f.flush()
+    raise
+
+
+# use logDebug wherever
+# use try-except (with logTraceBack in except branch) to get exception info
+# an example of problematic function
+'''
+def brain_turn():
+    logDebug("some message 1")
+    try:
+        logDebug("some message 2")
+        1. / 0.  # some code raising an exception
+        logDebug("some message 3")  # not logged, as it is after error
+    except:
+        logTraceBack()
+'''
+
+######################################################################
+
+# "overwrites" functions in pisqpipe module
+pp.brain_init = brain_init
+pp.brain_restart = brain_restart
+pp.brain_my = brain_my
+pp.brain_opponents = brain_opponents
+pp.brain_block = brain_block
+pp.brain_takeback = brain_takeback
+pp.brain_turn = brain_turn
+pp.brain_end = brain_end
+pp.brain_about = brain_about
+if DEBUG_EVAL:
+    pp.brain_eval = brain_eval
+
+
+def main():
+    pp.main()
+
+
+if __name__ == "__main__":
+    main()
