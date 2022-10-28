@@ -6,6 +6,8 @@ pp.infotext = 'name="pbrain-pyrandom", author="Jan Stransky", version="1.0", cou
 
 MAX_BOARD = 100
 board = [[0 for i in range(MAX_BOARD)] for j in range(MAX_BOARD)]
+my = []
+oppo = []
 
 
 def brain_init():
@@ -32,6 +34,7 @@ def isFree(x, y):
 def brain_my(x, y):
     if isFree(x, y):
         board[x][y] = 1
+        my.append((x,y))
     else:
         pp.pipeOut("ERROR my move [{},{}]".format(x, y))
 
@@ -39,6 +42,7 @@ def brain_my(x, y):
 def brain_opponents(x, y):
     if isFree(x, y):
         board[x][y] = 2
+        oppo.append((x,y))
     else:
         pp.pipeOut("ERROR opponents's move [{},{}]".format(x, y))
 
@@ -53,6 +57,10 @@ def brain_block(x, y):
 def brain_takeback(x, y):
     if x >= 0 and y >= 0 and x < pp.width and y < pp.height and board[x][y] != 0:
         board[x][y] = 0
+        if (x,y) in my:
+            my.remove((x,y))
+        else:
+            oppo.remove((x,y))
         return 0
     return 2
 
@@ -61,7 +69,10 @@ def brain_turn():
     try:
         if pp.terminateAI:
             return
-        x, y = ab.search(board, pp.width, pp.height)
+        turn=1
+        # if len(my)==len(oppo):
+        #     turn = 1
+        x, y = ab.search(board, pp.width, pp.height, turn)
         pp.do_mymove(x, y)
     except:
         logTraceBack()
