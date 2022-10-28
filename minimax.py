@@ -1,6 +1,12 @@
 import time
 
-points = [1, 5, 1e1, 1e2, 1e2, 1e4, 1e7]
+points = [1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e7]
+
+# def weight(n):
+#     weights=[[0 for i in range(n)]for j in range(n)]
+#     for i in range(n):
+#         for j in range(n):
+#             weights[i][j]=
 
 FIVE = 6
 FOUR = 5
@@ -10,16 +16,16 @@ STHREE = 2
 TWO = 1
 STWO = 0
 
-DOUBLE_THREE = 9020
-LIVE_FOUR = 9050
+DOUBLE_THREE = 902000
+LIVE_FOUR = 905000
 
 w = 1
 
 max_depth = 3
 
-max_time = 10
+max_time = 1.5
 
-max_actions_num = 5
+max_actions_num = 15
 
 
 class Board:
@@ -28,8 +34,15 @@ class Board:
         self.board = board[0:width][0:height]
         self.width = width
         self.height = height
-        self.count = [[0 for pattern in range(8)] for role in range(2)]
+        self.place = [[] for role in range(2)]
+        self.count = [[0 for pattern in range(7)] for role in range(2)]
         self.involved = [[[0, 0, 0, 0] for y in range(height)] for x in range(width)]
+        for i in range(width):
+            for j in range(height):
+                if self.board[i][j]==1:
+                    self.place[0].append((i,j))
+                elif self.board[i][j]==2:
+                    self.place[1].append((i,j))
 
     def adjacent(self, x, y):
         for i in range(-1, 2):
@@ -44,42 +57,46 @@ class Board:
         return x < 0 or x >= self.width or y < 0 or y >= self.height
 
     def get_actions(self, role):
-
-        actions = []
+        max_actions = [(0,0,0) for i in range(max_actions_num)]
         five = []
-        live_four = []
+        m_live_four = []
+        o_live_four = []
+        if len(self.place[0])==0 and len(self.place[1])==0:
+            return [(0,int(self.width/2)-1,int(self.height/2)-1)]
         for x in range(self.width):
             for y in range(self.height):
                 if self.board[x][y] == 0 and self.adjacent(x, y):
                     m_score, o_score = self.point_score(x, y, role)
-                    action = (max(m_score, o_score), x, y)
+                    action = (int(max(m_score, o_score)), x, y)
                     if m_score >= points[FIVE] or o_score >= points[FIVE]:
                         five.append(action)
-                    elif m_score >= points[FOUR] or o_score >= points[FOUR]:
-                        live_four.append(action)
-                    actions.append(action)
-        if len(actions) == 0:
-            return [(0, int(self.width / 2) - 1, int(self.height / 2) - 1)]
+                    if m_score >= points[FOUR]:
+                        m_live_four.append(action)
+                    if o_score >=points[FOUR]:
+                        o_live_four.append(action)
+                    for i in range(max_actions_num):
+                        if max_actions[i][0]<action[0]:
+                            max_actions.pop()
+                            max_actions.insert(i,action)
+                            break
         if len(five) > 0:
             return five
-        if len(live_four) > 0:
-            return live_four
-        actions.sort(reverse=True)
-        if len(actions) > max_actions_num:
-            actions = actions[0:max_actions_num]
-        print(actions)
-        return actions
+        if len(m_live_four) > 0:
+            return m_live_four
+        elif len(o_live_four) > 0:
+            return o_live_four
+        return max_actions
 
     def point_score(self, x, y, role):
 
-        self.count = [[0 for chess_shape in range(8)] for role in range(2)]
-        directions = [(1, 0), (0, 1), (1, -1), (-1, 1)]
+        self.count = [[0 for chess_shape in range(7)] for role in range(2)]
+        directions = [(1, 0), (0, 1), (1, 1), (-1, 1)]
         self.board[x][y] = role
         for direction in directions:
             self.check_line(x, y, direction, role, self.count[role - 1])
         m_score = self.get_point_score(role)
         self.board[x][y] = 3 - role
-        self.count = [[0 for chess_shape in range(8)] for role in range(2)]
+        self.count = [[0 for chess_shape in range(7)] for role in range(2)]
         for direction in directions:
             self.check_line(x, y, direction, 3 - role, self.count[2 - role])
         o_score = self.get_point_score(3 - role)
@@ -91,18 +108,18 @@ class Board:
         if self.count[role - 1][FIVE] > 0:
             return points[FIVE]
 
-        if self.count[role - 1][FOUR] >= 0:
+        if self.count[role-1][FOUR] > 0:
             return points[FOUR]
 
         if self.count[role - 1][SFOUR] > 1:
-            score += self.count[role - 1][SFOUR] * points[SFOUR]
+            return points[FOUR]
         elif self.count[role - 1][SFOUR] > 0 and self.count[role - 1][THREE] > 0:
-            score += self.count[role - 1][SFOUR] * points[SFOUR]
+            return points[FOUR]
         elif self.count[role - 1][SFOUR] > 0:
-            score += points[THREE]
+            score += points[SFOUR]
 
         if self.count[role - 1][THREE] > 1:
-            score += 5 * points[THREE]
+            score += points[FOUR]
         else:
             score += points[THREE]
 
@@ -278,7 +295,7 @@ class Board:
 
         if self.count[role - 1][THREE] > 1 and self.count[2 - role][THREE] == 0:  # 双活三杀棋（需对手没有活三）
             return DOUBLE_THREE, 0
-        if self.count[2 - role][THREE] > 1 and self.count[role - 1][SFOUR] == 0:  # 双活三被杀
+        if self.count[2 - role][THREE] > 0 and self.count[role - 1][SFOUR] == 0:  # 活三被杀
             return 0, DOUBLE_THREE - 10
 
         m_score += self.count[role - 1][SFOUR] * points[SFOUR]
@@ -297,23 +314,21 @@ class Board:
         self.count = [[0 for pattern in range(8)] for role in range(2)]
         self.involved = [[[0, 0, 0, 0] for y in range(self.height)] for x in range(self.width)]
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
-        for y in range(self.height):
-            for x in range(self.width):
-                if self.board[x][y] == role:
-                    for i in range(4):
-                        if self.involved[x][y][i] == 0:
-                            self.check_line(x, y, directions[i], role, self.count[role - 1])
-                if self.board[x][y] == 3 - role:
-                    for i in range(4):
-                        if self.involved[x][y][i] == 0:
-                            self.check_line(x, y, directions[i], 3 - role, self.count[2 - role])
+        for x,y in self.place[role-1]:
+            for i in range(4):
+                if self.involved[x][y][i] == 0:
+                    self.check_line(x, y, directions[i], role, self.count[role - 1])
+        for x,y in self.place[2-role]:
+            for i in range(4):
+                if self.involved[x][y][i] == 0:
+                    self.check_line(x, y, directions[i], 3 - role, self.count[2 - role])
 
         m_score, o_score = self.get_score(role)
         return w * m_score - o_score
 
 
 def max_value(board, role, alpha, beta, depth, t):
-    if depth>=max_depth:
+    if depth >= max_depth or time.time()-t>=max_time:
         return board.utility(role), None
     v = float("-inf")
 
@@ -322,12 +337,17 @@ def max_value(board, role, alpha, beta, depth, t):
         action = None
         for a in action_list:
             board.board[a[1]][a[2]] = role
+            board.place[role-1].append((a[1],a[2]))
             move_v, _ = min_value(board, role, alpha, beta, depth + 1,t)
             board.board[a[1]][a[2]] = 0
+            board.place[role-1].remove((a[1],a[2]))
+            if move_v >= 700000:
+                return move_v, a  # 检测到必胜情况，直接返回
             if move_v > v:
                 v = move_v
                 action = a
-            if v >= beta: return v, action
+            if v >= beta:
+                return v, action
             alpha = max(alpha, v)
         return v, action
         # ---------------------------------
@@ -339,7 +359,7 @@ def max_value(board, role, alpha, beta, depth, t):
 
 
 def min_value(board, role, alpha, beta, depth, t):
-    if depth>=max_depth:
+    if depth >= max_depth or time.time()-t>max_time:
         return board.utility(role), None
     v = float("inf")
 
@@ -348,12 +368,17 @@ def min_value(board, role, alpha, beta, depth, t):
         action = None
         for a in action_list:
             board.board[a[1]][a[2]] = 3 - role
-            move_v, _ = max_value(board, role, alpha, beta, depth + 1,t)
+            board.place[2-role].append((a[1],a[2]))
+            move_v, _ = max_value(board, role, alpha, beta, depth + 1, t)
             board.board[a[1]][a[2]] = 0
+            board.place[2-role].remove((a[1],a[2]))
+            if move_v <= -900000:  # 检测到必败情况，直接返回
+                return move_v, a
             if move_v < v:
                 v = move_v
                 action = a
-            if v <= alpha: return v, action
+            if v <= alpha:
+                return v, action
             beta = min(beta, v)
         return v, action
         # ---------------------------------
@@ -364,11 +389,14 @@ def min_value(board, role, alpha, beta, depth, t):
     return v, action
 
 
-def search(board, width, height):
+def search(board, width, height, turn):
     P = Board(board, width, height)
     alpha = float("-inf")
     beta = float("inf")
     depth = 0
     role = 1
-    _, action = max_value(P, role, alpha, beta, depth,time.time())
+    if turn==1:
+        _, action = max_value(P, role, alpha, beta, depth, time.time())
+    else:
+        _, action = min_value(P, 3-role, alpha, beta, depth, time.time())
     return action[1], action[2]
