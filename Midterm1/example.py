@@ -3,7 +3,10 @@ import time
 import random
 from pisqpipe import DEBUG_EVAL, DEBUG
 
-pp.infotext = 'name="pbrain-alpha-beta", author="Keyu Mao, Jianzhi Shen", version="1.0", country="China", www="https://github.com/mskmei/Artificial-Intelligence"'
+pp.infotext = 'name="pbrain-alpha-beta",' \
+              ' author="Keyu Mao, Jianzhi Shen",' \
+              ' version="1.0", country="China",' \
+              ' www="https://github.com/mskmei/Artificial-Intelligence"'
 
 MAX_BOARD = 100
 board = [[0 for i in range(MAX_BOARD)] for j in range(MAX_BOARD)]
@@ -11,12 +14,6 @@ my = []
 oppo = []
 
 points = [1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e7]
-
-# def weight(n):
-#     weights=[[0 for i in range(n)]for j in range(n)]
-#     for i in range(n):
-#         for j in range(n):
-#             weights[i][j]=
 
 FIVE = 6
 FOUR = 5
@@ -31,7 +28,7 @@ LIVE_FOUR = 905000
 
 w = 0.7
 
-max_depth = 5
+max_depth = 4
 
 max_time = 14
 
@@ -50,9 +47,13 @@ def brain_init():
 
 
 def brain_restart():
+    global my, oppo, hash
     for x in range(pp.width):
         for y in range(pp.height):
             board[x][y] = 0
+            my = []
+            oppo = []
+            hash=0
     pp.pipeOut("OK")
 
 
@@ -61,17 +62,21 @@ def isFree(x, y):
 
 
 def brain_my(x, y):
+    global hash
     if isFree(x, y):
         board[x][y] = 1
         my.append((x,y))
+        hash^=ranTable[x][y][1]
     else:
         pp.pipeOut("ERROR my move [{},{}]".format(x, y))
 
 
 def brain_opponents(x, y):
+    global hash
     if isFree(x, y):
         board[x][y] = 2
         oppo.append((x,y))
+        hash^=ranTable[x][y][1]
     else:
         pp.pipeOut("ERROR opponents's move [{},{}]".format(x, y))
 
@@ -115,7 +120,7 @@ def brain_about():
     pp.pipeOut(pp.infotext)
 
 
-
+hash=0
 
 zobristHash={}
 
@@ -169,7 +174,8 @@ class Board:
         优先考虑进攻，因为这是该角色的回合。
         """
         max_actions = [(0,0,0) for i in range(max_actions_num)]
-        five = []
+        m_five = []
+        o_five = []
         m_live_four = []
         o_live_four = []
         m_sleep_four = []
@@ -180,8 +186,10 @@ class Board:
                 if self.board[x][y] == 0 and self.adjacent(x, y):
                     m_score, o_score = self.point_score(x, y, role)
                     action = (int(max(m_score, o_score)), x, y)
-                    if m_score >= points[FIVE] or o_score >= points[FIVE]:
-                        five.append(action)
+                    if m_score >= points[FIVE]:
+                        m_five.append(action)
+                    if o_score >= points[FIVE]:
+                        o_five.append(action)
                     if m_score >= points[FOUR]:
                         m_live_four.append(action)
                     if o_score >= points[FOUR]:
@@ -193,8 +201,10 @@ class Board:
                             max_actions.pop()
                             max_actions.insert(i, action)
                             break
-        if len(five) > 0:  # 构成五连威胁，直接返回
-            return five
+        if len(m_five) > 0:  # 构成五连威胁，直接返回
+            return m_five
+        if len(o_five) > 0:  # 对手构成五连威胁
+            return o_five
         if len(m_live_four) > 0:  # 构成活四威胁，直接返回，优先考虑进攻
             return m_live_four
         if len(o_live_four) > 0:  # 对手构成活四威胁，只考虑眠四进攻或防守
@@ -442,25 +452,29 @@ class Board:
 
 
 def max_value(board, role, alpha, beta, depth, t):
+    global hash
     if depth >= max_depth or time.time()-t>=max_time:
-        current_hash=hashValue(board.board)
-        if current_hash in zobristHash:
-            utility = zobristHash[current_hash]
+        if hash in zobristHash:
+            utility = zobristHash[hash]
         else:
             utility = board.utility(role)
-            zobristHash[current_hash]=utility
+            zobristHash[hash]=utility
         return utility, None
     v = float("-inf")
 
     action_list = board.get_actions(role)  # 获取自己可下的地方
     if len(action_list) != 0:  # 有地方可下
+        if depth==0 and len(action_list)==1:
+            return 0,action_list[0]
         action = None
         for a in action_list:
             board.board[a[1]][a[2]] = role
             board.place[role-1].append((a[1],a[2]))
+            hash^=ranTable[a[1]][a[2]][role-1]
             move_v, _ = min_value(board, role, alpha, beta, depth + 1,t)
             board.board[a[1]][a[2]] = 0
             board.place[role-1].remove((a[1],a[2]))
+            hash^=ranTable[a[1]][a[2]][role-1]
             if move_v >= 700000:
                 return move_v, a  # 检测到必胜情况，直接返回
             if move_v > v:
@@ -479,13 +493,13 @@ def max_value(board, role, alpha, beta, depth, t):
 
 
 def min_value(board, role, alpha, beta, depth, t):
+    global hash
     if depth >= max_depth or time.time()-t>max_time:
-        current_hash = hashValue(board.board)
-        if current_hash in zobristHash:
-            utility = zobristHash[current_hash]
+        if hash in zobristHash:
+            utility = zobristHash[hash]
         else:
             utility = board.utility(role)
-            zobristHash[current_hash] = utility
+            zobristHash[hash] = utility
         return utility, None
     v = float("inf")
 
@@ -495,9 +509,11 @@ def min_value(board, role, alpha, beta, depth, t):
         for a in action_list:
             board.board[a[1]][a[2]] = 3 - role
             board.place[2-role].append((a[1],a[2]))
+            hash^=ranTable[a[1]][a[2]][2-role]
             move_v, _ = max_value(board, role, alpha, beta, depth + 1, t)
             board.board[a[1]][a[2]] = 0
             board.place[2-role].remove((a[1],a[2]))
+            hash^=ranTable[a[1]][a[2]][2-role]
             if move_v <= -900000:  # 检测到必败情况，直接返回
                 return move_v, a
             if move_v < v:
