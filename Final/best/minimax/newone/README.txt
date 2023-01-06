@@ -1,4 +1,4 @@
-这个文件夹中对算杀进行了优化，提供了多种策略选择，并将Zobrist Hash应用于算杀中。
-但是目前还不能找到最佳参数，因此不作为提交文件！
+This folder optimizes the counting and killing, provides a variety of strategy options, and applies Zobrist Hash to the counting and killing.
+However, the best parameters cannot be found yet, so it is not considered as a submission file!
 
-本文件对应报告中最后一个实验，即关于策略与哈希对搜素耗时的影响
+This document corresponds to the last experiment in the report, which is about the impact of strategy and hash on search time consumption
